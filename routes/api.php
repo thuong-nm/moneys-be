@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\SubscriptionController;
+use App\Http\Controllers\TextShareController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -10,6 +11,11 @@ use Illuminate\Support\Facades\Route;
 | API Routes
 |--------------------------------------------------------------------------
 */
+
+// Text Share API (public, rate limited)
+Route::middleware('throttle:10,1')->group(function () {
+    Route::post('/text-share', [TextShareController::class, 'store']);
+});
 
 Route::prefix('v1')->middleware('api.key')->group(function () {
     // Health check
