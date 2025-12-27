@@ -476,9 +476,8 @@
             <option value="json">JSON</option>
             <option value="xml">XML</option>
             <option value="html">HTML</option>
-            <option value="base64">Base64</option>
-            <option value="base64-encode">→ Base64 Encode</option>
-            <option value="base64-decode">← Base64 Decode</option>
+            <option value="base64-encode">Base64 Encode</option>
+            <option value="base64-decode">Base64 Decode</option>
         </select>
         <button class="btn" onclick="formatEditor()">Format</button>
         <button class="btn" onclick="toggleTheme()">◐</button>
