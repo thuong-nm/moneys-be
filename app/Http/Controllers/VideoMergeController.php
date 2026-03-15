@@ -41,15 +41,6 @@ class VideoMergeController extends Controller
         // Set execution timeout for long FFmpeg operations
         set_time_limit(300);
 
-        // Validate API key from header
-        $apiKey = $request->header('X-API-Key');
-        if (!$apiKey || $apiKey !== config('app.api_key')) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Invalid or missing API key',
-            ], 401);
-        }
-
         // Validate request
         $validated = $request->validate([
             'video_url' => 'required|url',
@@ -138,15 +129,6 @@ class VideoMergeController extends Controller
      */
     public function cleanup(Request $request)
     {
-        // Validate API key from header
-        $apiKey = $request->header('X-API-Key');
-        if (!$apiKey || $apiKey !== config('app.api_key')) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Invalid or missing API key',
-            ], 401);
-        }
-
         $validated = $request->validate([
             'job_id' => 'required|string|max:100|regex:/^[a-zA-Z0-9_-]+$/',
         ]);
@@ -324,17 +306,8 @@ class VideoMergeController extends Controller
      *
      * GET /api/video/status
      */
-    public function status(Request $request)
+    public function status()
     {
-        // Validate API key from header
-        $apiKey = $request->header('X-API-Key');
-        if (!$apiKey || $apiKey !== config('app.api_key')) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Invalid or missing API key',
-            ], 401);
-        }
-
         // Check FFmpeg
         $ffmpegVersion = shell_exec(escapeshellarg($this->ffmpegPath) . ' -version 2>&1 | head -1');
         $ffmpegInstalled = $ffmpegVersion && strpos($ffmpegVersion, 'ffmpeg version') !== false;

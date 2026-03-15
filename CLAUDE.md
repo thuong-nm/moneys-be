@@ -123,19 +123,12 @@ Stored in localStorage as `ts_browser_id` for persistence.
 - Uses `web` middleware for session support
 
 #### Video Merge API (External)
-Requires `X-API-Key` header for authentication.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/video/merge` | Merge video with TTS audio |
 | POST | `/api/video/cleanup` | Delete merged video file |
 | GET | `/api/video/status` | Check system status |
-
-**Headers:**
-```
-X-API-Key: your-api-key
-Content-Type: application/json
-```
 
 **POST /api/video/merge**
 ```json
@@ -218,9 +211,6 @@ DB_DATABASE=moneys
 DB_USERNAME=root
 DB_PASSWORD=
 
-# API Key (for external API access via X-API-Key header)
-API_KEY=your-secure-api-key-here
-
 # FFmpeg path (for video merge)
 FFMPEG_PATH=/usr/bin/ffmpeg
 ```
@@ -290,4 +280,4 @@ PHPUnit configured for Laravel 12. Test files go in:
 - **Privacy-focused**: Browser fingerprint stored locally
 - **Automatic cleanup**: Expired guest shares deleted daily
 - **Lightweight**: No heavy dependencies (no Sanctum, Filament, Swagger)
-- **Video Merge API**: External API for merging videos with TTS audio (requires API key)
+- **Video Merge API**: External API for merging videos with TTS audio
