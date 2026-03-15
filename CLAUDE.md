@@ -4,21 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MoneyS is an **API-only** user and device management system built with Laravel 12. This application has been refactored from a full-stack system to focus exclusively on providing RESTful API endpoints.
+**Text Share** is a simple, lightweight web application for sharing text with short URLs. Built with Laravel 12, it allows users to create and share text snippets with optional password protection and automatic expiration.
 
-**Current State:**
-- ✅ Pure API backend (no admin panel, no web UI)
-- ✅ User authentication and registration (including guest accounts)
-- ✅ Device management per user
-- ✅ Subscription management per user
-- ✅ L5-Swagger for API documentation
-- ✅ UUID-based primary keys throughout
+**Key Features:**
+- ✅ Share text via short URLs (`/s/{hash}`)
+- ✅ Optional password protection
+- ✅ Browser-based history tracking (using fingerprinting)
+- ✅ Multiple expiration options (1 day, 1 week, 1 month, 1 year)
+- ✅ Auto-cleanup of expired shares
+- ✅ Clean, modern UI with dark mode
+- ✅ Multiple format support (JSON, XML, Markdown, HTML, Base64)
 
 **Tech Stack:**
 - Laravel 12
-- Laravel Sanctum (API token authentication)
-- L5-Swagger (OpenAPI/Swagger documentation)
-- MySQL with UUID primary keys
+- MySQL database
+- Vanilla JavaScript (no frontend framework)
+- Marked.js (Markdown rendering)
+- Pako.js & LZ-String (compression)
 
 ## Development Commands
 
@@ -30,12 +32,10 @@ php artisan key:generate
 php artisan migrate
 ```
 
-**Important:** Set `API_KEY` in `.env` - all API requests require this header.
-
 ### Running Development Server
 ```bash
 php artisan serve
-# API available at: http://localhost:8000
+# App available at: http://localhost:8000
 ```
 
 ### Database Operations
@@ -44,10 +44,10 @@ php artisan migrate           # Run migrations
 php artisan migrate:fresh     # Reset and rebuild database
 ```
 
-### API Documentation
+### Cleanup Command
 ```bash
-php artisan l5-swagger:generate
-# View at: http://localhost:8000/api/documentation
+php artisan text-share:cleanup  # Manually cleanup expired shares
+# Auto-runs daily at midnight via Laravel scheduler
 ```
 
 ### Code Quality
@@ -58,165 +58,149 @@ php artisan test             # Run tests
 
 ## Architecture Overview
 
-### API-Only Application
-This is strictly an API backend. There is **no web UI or admin panel**. The root URL (`/`) returns JSON with API information.
+### Simple Web Application
+This is a public web app with no authentication required. Users can:
+- Create text shares from the home page (`/`)
+- View shares via short URLs (`/s/{hash_id}`)
+- Browse their history (tracked by browser fingerprint)
 
 ### Data Model
-The application uses the following primary tables:
 
-**1. users**
-- UUID primary key
-- Supports both regular users (email/password) and guest users (no credentials)
-- Fields: `email`, `password`, `full_name`, `is_guest`, `language`, `currency`, `is_active`, `last_logged_in`
+**text_shares table:**
+- `id` - Auto-increment primary key
+- `hash_id` - Unique 10-character identifier for URL
+- `browser_id` - Browser fingerprint (for history tracking)
+- `content` - Compressed text content
+- `format` - Format type (json, xml, markdown, etc.)
+- `password` - Optional hashed password
+- `expires_at` - Expiration timestamp
+- `created_at`, `updated_at` - Timestamps
 
-**2. user_devices**
-- UUID primary key and foreign key
-- One user can have multiple devices
-- Fields: `device_id`, `device_name`, `device_type` (android/ios/web), `fcm_token`, `is_active`
+### Browser Fingerprinting
+Uses a simple fingerprint based on:
+- User agent
+- Language
+- Screen resolution
+- Color depth
+- Timezone
+- Canvas fingerprint
 
-**3. subscriptions**
-- UUID primary key and foreign key
-- Tracks user subscriptions
-- Fields: `user_id`, `name`, `description`, `price`, `currency`, `billing_cycle`, `start_date`, `end_date`, `status`
+Stored in localStorage as `ts_browser_id` for persistence.
 
-### UUID Primary Keys
-All models use UUIDs instead of auto-incrementing integers:
-- Models use `HasUuids` trait
-- Migrations use `$table->uuid('id')->primary()`
-- Foreign keys use `$table->foreignUuid('user_id')`
+### Password Protection
+- Optional password per share
+- Password hashed with `password_hash()` (bcrypt)
+- Session-based verification (remember on device via session + cookie)
+- Minimum password length: 1 character
 
-### Authentication Flow
+## Routes
 
-**Two-Layer Authentication:**
-1. **API Key** (all requests): Header `X-API-KEY` validated by `ValidateApiSecurityKey` middleware
-2. **User Token** (protected routes): Sanctum bearer token for authenticated users
+### Web Routes (`routes/web.php`)
+- `GET /` - Home page (create new share)
+- `GET /s/{hashId}` - View a specific share
 
-**Guest vs Regular Users:**
-- Guest users: `is_guest=true`, no email/password required, identified by `device_id`
-- Regular users: `is_guest=false`, require email/password
+### API Routes (`routes/api.php`)
+- `POST /api/text-share` - Create a new share
+- `POST /api/text-share/{hashId}/verify` - Verify password
+- `POST /api/text-share/history` - Get history by browser_id
 
-### Request/Response Pattern
+All API routes:
+- Rate limited: 10 requests/minute
+- CSRF excluded
+- Use `web` middleware for session support
 
-**Base Controller** (`app/Http/Controllers/Api/Controller.php`) provides response helpers:
-```php
-$this->success($data, $message, $code)
-$this->error($message, $code, $errors)
-```
+## Key Implementation Details
 
-**Standard Response Format:**
-```json
-{
-  "success": true/false,
-  "message": "...",
-  "data": {...} // or "errors": {...}
-}
-```
+### Text Compression
+Three compression methods (auto-selects smallest):
+- Raw: URL encode (prefix: `R`)
+- LZ-String: LZW compression (prefix: `L`)
+- Pako: Deflate compression (prefix: `Z`)
 
-### Form Requests
-All API inputs validated via Form Requests in `app/Http/Requests/`:
-- `RegisterRequest` - validates guest vs regular registration differently
-- `LoginRequest`
-- `ForgotPasswordRequest`
-- `ResetPasswordRequest`
-- `CreateSubscriptionRequest` - validates subscription creation
-- `UpdateSubscriptionRequest` - validates subscription updates
+### History Tracking
+- Client-side browser fingerprinting
+- Stored in localStorage
+- API fetches shares by `browser_id`
+- Sidebar UI shows last 50 shares
 
-## API Endpoints
+### Auto-Cleanup
+- Command: `CleanupExpiredTextShares`
+- Scheduled: Daily at midnight
+- Deletes shares where `expires_at < now()`
 
-**Base:** `/api/v1`
-**Required Header:** `X-API-KEY: {value-from-env}`
+### Views
+- `resources/views/text-share/index.blade.php` - Home page
+- `resources/views/text-share/show.blade.php` - View share
 
-### Public Routes
-- `POST /user/register` - Create user (guest or regular) + device
-- `POST /user/login` - Authenticate with email/password
-- `POST /user/forgot-password` - Request password reset
-- `POST /user/reset-password` - Reset with token
-- `GET /health` - Health check
+Both pages include:
+- Editor with live preview
+- Format selector and formatter
+- Save controls (password, expiration)
+- History sidebar
+- Dark mode toggle
 
-### Protected Routes (require Bearer token)
-- `GET /user/me` - Get authenticated user info
-- `POST /user/device` - Add a new device for the user
-- `DELETE /user/device/{device_id}` - Remove a device
+## Environment Variables
 
-**Subscription Management:**
-- `GET /subscription` - Get all subscriptions for authenticated user
-- `POST /subscription` - Create a new subscription
-- `GET /subscription/{id}` - Get a specific subscription
-- `PUT /subscription/{id}` - Update a subscription
-- `DELETE /subscription/{id}` - Delete a subscription
-
-## Key Configuration
-
-### Environment Variables
 Required in `.env`:
 ```
-API_KEY=your-secret-api-key-here  # Required for all API requests
+APP_NAME="Text Share"
+APP_URL=http://localhost:8000
+
+DB_CONNECTION=mysql
 DB_DATABASE=moneys
+DB_USERNAME=root
+DB_PASSWORD=
 ```
 
-Optional for password reset emails:
-```
-MAIL_MAILER=smtp
-MAIL_HOST=...
-MAIL_PORT=587
-```
+No API keys or authentication tokens needed.
 
-### Middleware
-- `api.key` - Validates `X-API-KEY` header (applied to all `/api/v1` routes)
-- `auth:sanctum` - Validates bearer token (applied to protected routes)
-
-## Important Implementation Notes
-
-### Password Reset
-Uses Laravel's built-in password reset:
-- Token stored in `password_reset_tokens` table
-- Requires email configuration in `.env`
-- Uses `Password` facade for token generation/validation
-
-### Swagger Documentation
-- Main API info: `app/Http/Controllers/Api/Controller.php`
-- Schemas: `app/Http/Controllers/Api/Schemas.php`
-- Endpoint annotations: In controller methods using `@OA\` tags
-- Security schemes: Both `apiKey` (X-API-KEY) and `sanctum` (Bearer) defined
-
-### Model Relationships
-```php
-User::devices()           // HasMany UserDevice
-User::subscriptions()     // HasMany Subscription
-UserDevice::user()        // BelongsTo User
-Subscription::user()      // BelongsTo User
-```
-
-### Soft Deletes
-User model uses soft deletes - deleted users aren't immediately removed from database.
-
-## Migrations Structure
+## Database Migrations
 
 Current migrations (in order):
-1. `create_users_table` - Base Laravel users
-2. `create_cache_table` - Laravel cache
-3. `create_jobs_table` - Laravel queue jobs
-4. `create_personal_access_tokens_table` - Sanctum tokens
-5. `update_personal_access_tokens_for_uuid` - Convert to UUID foreign keys
-6. `create_users_and_devices_tables_v2` - Main schema (modifies users, creates user_devices)
-7. `drop_unused_tables` - Cleanup from previous full-stack version
-8. `create_subscriptions_table` - Subscription management
-9. `create_admin_users_table` - Admin users (if Filament is still in use)
+1. `create_cache_table` - Laravel cache
+2. `create_jobs_table` - Laravel queue jobs
+3. `create_text_shares_table` - Main text_shares table
+4. `add_password_to_text_shares_table` - Password protection
+5. `add_browser_id_to_text_shares_table` - History tracking
+6. `drop_old_feature_tables` - Cleanup from previous version
 
-## What Was Removed
+## Project Structure
 
-This codebase was refactored from a full-stack application. The following were removed or are being removed:
-- ⚠️ Filament admin panel (partially removed - some resources still exist)
-- ❌ Firebase Cloud Messaging service
-- ❌ Payment plans and billing
-- ❌ Notification system
-- ❌ Background jobs and scheduled tasks
-- ❌ Laravel Horizon
+```
+app/
+├── Console/Commands/
+│   └── CleanupExpiredTextShares.php
+├── Http/Controllers/
+│   ├── Controller.php (Laravel base)
+│   └── TextShareController.php
+├── Models/
+│   └── TextShare.php
+└── Providers/
+    └── AppServiceProvider.php
 
-**Note:** Subscription management is **ACTIVE** - the API endpoints and database tables exist and are functional. The README.md may mention removed features that no longer exist.
+routes/
+├── api.php (text-share API endpoints)
+├── web.php (/, /s/{hash})
+└── console.php (cleanup schedule)
+
+resources/views/text-share/
+├── index.blade.php (home page)
+└── show.blade.php (view share)
+
+database/migrations/
+└── (text_shares related migrations)
+```
 
 ## Testing
 
 PHPUnit configured for Laravel 12. Test files go in:
 - `tests/Feature/` - Integration tests
 - `tests/Unit/` - Unit tests
+
+## Notes
+
+- **No authentication**: Completely public application
+- **No user accounts**: Stateless, browser-based tracking only
+- **Privacy-focused**: Browser fingerprint stored locally, not tracked server-side beyond shares
+- **Automatic cleanup**: Expired shares deleted daily
+- **Lightweight**: No heavy dependencies (no Sanctum, Filament, Swagger)

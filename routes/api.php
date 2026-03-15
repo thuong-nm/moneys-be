@@ -1,8 +1,6 @@
 <?php
 
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\HealthController;
-use App\Http\Controllers\Api\SubscriptionController;
+use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\TextShareController;
 use Illuminate\Support\Facades\Route;
 
@@ -12,36 +10,17 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-// Text Share API (public, rate limited)
-Route::middleware('throttle:10,1')->group(function () {
-    Route::post('/text-share', [TextShareController::class, 'store']);
+// Authentication API (public, no rate limiting for better UX)
+Route::middleware(['web'])->prefix('auth')->group(function () {
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/me', [AuthController::class, 'me']);
 });
 
-Route::prefix('v1')->middleware('api.key')->group(function () {
-    // Health check
-    Route::get('/health', [HealthController::class, 'check']);
-
-    // Authentication routes (public)
-    Route::prefix('user')->group(function () {
-        Route::post('/register', [AuthController::class, 'register']);
-        Route::post('/login', [AuthController::class, 'login']);
-        Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-        Route::post('/reset-password', [AuthController::class, 'resetPassword']);
-    });
-
-    // Protected routes (require authentication)
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::get('/user/me', [AuthController::class, 'me']);
-
-        // Device management routes
-        Route::post('/user/device', [AuthController::class, 'addDevice']);
-        Route::delete('/user/device/{device_id}', [AuthController::class, 'removeDevice']);
-
-        // Subscription routes
-        Route::get('/subscription', [SubscriptionController::class, 'index']);
-        Route::post('/subscription', [SubscriptionController::class, 'store']);
-        Route::get('/subscription/{id}', [SubscriptionController::class, 'show']);
-        Route::put('/subscription/{id}', [SubscriptionController::class, 'update']);
-        Route::delete('/subscription/{id}', [SubscriptionController::class, 'destroy']);
-    });
+// Text Share API (public with optional auth, rate limited, with session for password verification)
+Route::middleware(['web', 'optional.auth', 'throttle:10,1'])->group(function () {
+    Route::post('/text-share', [TextShareController::class, 'store']);
+    Route::post('/text-share/{hashId}/verify', [TextShareController::class, 'verifyPassword']);
+    Route::post('/text-share/history', [TextShareController::class, 'history']);
 });
