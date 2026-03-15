@@ -9,11 +9,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Key Features:**
 - ✅ Share text via short URLs (`/s/{hash}`)
 - ✅ Optional password protection
+- ✅ Optional user authentication (login/register)
 - ✅ Browser-based history tracking (using fingerprinting)
 - ✅ Multiple expiration options (1 day, 1 week, 1 month, 1 year)
+- ✅ Permanent shares for logged-in users
 - ✅ Auto-cleanup of expired shares
 - ✅ Clean, modern UI with dark mode
 - ✅ Multiple format support (JSON, XML, Markdown, HTML, Base64)
+- ✅ Video Merge API (external integration)
 
 **Tech Stack:**
 - Laravel 12
@@ -100,14 +103,78 @@ Stored in localStorage as `ts_browser_id` for persistence.
 - `GET /s/{hashId}` - View a specific share
 
 ### API Routes (`routes/api.php`)
-- `POST /api/text-share` - Create a new share
-- `POST /api/text-share/{hashId}/verify` - Verify password
-- `POST /api/text-share/history` - Get history by browser_id
 
-All API routes:
+#### Authentication API
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register new user |
+| POST | `/api/auth/login` | Login user |
+| POST | `/api/auth/logout` | Logout user |
+| GET | `/api/auth/me` | Get current user info |
+
+#### Text Share API
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/text-share` | Create a new share |
+| POST | `/api/text-share/{hashId}/verify` | Verify password |
+| POST | `/api/text-share/history` | Get history by browser_id |
+
 - Rate limited: 10 requests/minute
-- CSRF excluded
-- Use `web` middleware for session support
+- Uses `web` middleware for session support
+
+#### Video Merge API (External)
+Requires `X-API-Key` header for authentication.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/video/merge` | Merge video with TTS audio |
+| POST | `/api/video/cleanup` | Delete merged video file |
+| GET | `/api/video/status` | Check system status |
+
+**Headers:**
+```
+X-API-Key: your-api-key
+Content-Type: application/json
+```
+
+**POST /api/video/merge**
+```json
+{
+  "video_url": "https://example.com/video.mp4",
+  "audio_url": "https://example.com/audio.mp3",
+  "job_id": "unique-job-id"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "output_url": "https://your-domain.com/merged_videos/job-id_final.mp4",
+  "job_id": "unique-job-id",
+  "file_size": 12345678
+}
+```
+
+**POST /api/video/cleanup**
+```json
+{
+  "job_id": "unique-job-id"
+}
+```
+
+**GET /api/video/status**
+```json
+{
+  "success": true,
+  "ffmpeg_installed": true,
+  "ffmpeg_path": "/usr/bin/ffmpeg",
+  "ffmpeg_version": "ffmpeg version 4.4.2",
+  "disk_free_gb": 50.25,
+  "disk_total_gb": 100.00,
+  "pending_files": 3
+}
+```
 
 ## Key Implementation Details
 
@@ -150,9 +217,13 @@ DB_CONNECTION=mysql
 DB_DATABASE=moneys
 DB_USERNAME=root
 DB_PASSWORD=
-```
 
-No API keys or authentication tokens needed.
+# API Key (for external API access via X-API-Key header)
+API_KEY=your-secure-api-key-here
+
+# FFmpeg path (for video merge)
+FFMPEG_PATH=/usr/bin/ffmpeg
+```
 
 ## Database Migrations
 
@@ -172,23 +243,37 @@ app/
 │   └── CleanupExpiredTextShares.php
 ├── Http/Controllers/
 │   ├── Controller.php (Laravel base)
-│   └── TextShareController.php
+│   ├── TextShareController.php
+│   ├── VideoMergeController.php
+│   └── Auth/
+│       └── AuthController.php
 ├── Models/
-│   └── TextShare.php
+│   ├── TextShare.php
+│   └── User.php
 └── Providers/
     └── AppServiceProvider.php
 
 routes/
-├── api.php (text-share API endpoints)
+├── api.php (all API endpoints)
 ├── web.php (/, /s/{hash})
 └── console.php (cleanup schedule)
 
 resources/views/text-share/
 ├── index.blade.php (home page)
-└── show.blade.php (view share)
+├── show.blade.php (view share)
+└── partials/
+    └── auth-modal.blade.php (login/register modal)
+
+public/
+├── css/text-share.css
+├── js/
+│   ├── auth.js
+│   ├── auth-patch.js
+│   └── text-share/app.js
+└── merged_videos/ (output directory for video merge)
 
 database/migrations/
-└── (text_shares related migrations)
+└── (text_shares, users related migrations)
 ```
 
 ## Testing
@@ -199,8 +284,10 @@ PHPUnit configured for Laravel 12. Test files go in:
 
 ## Notes
 
-- **No authentication**: Completely public application
-- **No user accounts**: Stateless, browser-based tracking only
-- **Privacy-focused**: Browser fingerprint stored locally, not tracked server-side beyond shares
-- **Automatic cleanup**: Expired shares deleted daily
+- **Optional authentication**: Users can register/login for permanent shares, or use as guest
+- **Guest users**: Browser-based tracking with expiration (1 day to 1 year)
+- **Logged-in users**: Permanent shares, no expiration
+- **Privacy-focused**: Browser fingerprint stored locally
+- **Automatic cleanup**: Expired guest shares deleted daily
 - **Lightweight**: No heavy dependencies (no Sanctum, Filament, Swagger)
+- **Video Merge API**: External API for merging videos with TTS audio (requires API key)

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\TextShareController;
+use App\Http\Controllers\VideoMergeController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -23,4 +24,11 @@ Route::middleware(['web', 'optional.auth', 'throttle:10,1'])->group(function () 
     Route::post('/text-share', [TextShareController::class, 'store']);
     Route::post('/text-share/{hashId}/verify', [TextShareController::class, 'verifyPassword']);
     Route::post('/text-share/history', [TextShareController::class, 'history']);
+});
+
+// Video Merge API (for n8n integration)
+Route::prefix('video')->group(function () {
+    Route::post('/merge', [VideoMergeController::class, 'merge']);
+    Route::post('/cleanup', [VideoMergeController::class, 'cleanup']);
+    Route::get('/status', [VideoMergeController::class, 'status']);
 });
